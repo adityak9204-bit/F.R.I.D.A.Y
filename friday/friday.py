@@ -111,3 +111,11 @@ def reset_session(session_id: str) -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"ok": True, "sessions": len(SESSION_HISTORY)}
+    from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+# ... the rest of your bot code ...
