@@ -7,17 +7,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from openai import OpenAI
+from openai import OpenAI  # Groq uses the same OpenAI library structure
 from pydantic import BaseModel, Field
 
 # --- CONFIGURATION ---
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4") # Standardized to gpt-4
+# We change the default model to a fast Groq model
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile") 
 BOSS_NAME = os.getenv("BOSS_NAME", "Boss")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
 
 SYSTEM_PROMPT = f"""
 You are Friday, my personal AI assistant.
-
 Relationship and tone:
 - Treat the user as your boss and primary decision-maker.
 - Address the user respectfully as {BOSS_NAME}.
@@ -46,16 +46,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure the 'static' folder exists in your repo!
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 SESSION_HISTORY: dict[str, list[dict[str, str]]] = defaultdict(list)
 
 def _client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
+    # We now look for the GROQ_API_KEY you added to Render
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return OpenAI(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY is not set")
+    
+    # This is the "Magic" part: we redirect the client to Groq's URL
+    return OpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=api_key
+    )
 
 def _build_input(session_id: str, user_text: str) -> list[dict[str, str]]:
     history = SESSION_HISTORY.get(session_id, [])
@@ -67,7 +72,6 @@ def _build_input(session_id: str, user_text: str) -> list[dict[str, str]]:
 def _remember(session_id: str, user_text: str, assistant_text: str) -> None:
     SESSION_HISTORY[session_id].append({"role": "user", "content": user_text})
     SESSION_HISTORY[session_id].append({"role": "assistant", "content": assistant_text})
-    # Keep history within limits
     if len(SESSION_HISTORY[session_id]) > MAX_HISTORY_MESSAGES:
         SESSION_HISTORY[session_id] = SESSION_HISTORY[session_id][-MAX_HISTORY_MESSAGES:]
 
@@ -80,9 +84,9 @@ def index() -> FileResponse:
 def ask(payload: AskRequest) -> AskResponse:
     client = _client()
 
-    # Corrected OpenAI API call
+    # Model is updated to GROQ_MODEL
     response = client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=GROQ_MODEL,
         messages=_build_input(payload.session_id, payload.text),
     )
 
