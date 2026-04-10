@@ -91,17 +91,19 @@ def index() -> FileResponse:
 def ask(payload: AskRequest) -> AskResponse:
     client = _client()
 
-    response = client.responses.create(
+    # Fixed the API call to use standard Chat Completions
+    response = client.chat.completions.create(
         model=OPENAI_MODEL,
-        tools=[{"type": "web_search_preview"}],
-        input=_build_input(payload.session_id, payload.text),
+        messages=_build_input(payload.session_id, payload.text)
     )
 
-    answer = response.output_text.strip()
+    answer = response.choices[0].message.content.strip()
     _remember(payload.session_id, payload.text, answer)
-    return AskResponse(answer=answer, response_id=getattr(response, "id", None), session_id=payload.session_id)
-
-
+    return AskResponse(
+        answer=answer, 
+        response_id=response.id, 
+        session_id=payload.session_id
+    )
 @app.post("/reset/{session_id}")
 def reset_session(session_id: str) -> dict[str, Any]:
     SESSION_HISTORY.pop(session_id, None)
